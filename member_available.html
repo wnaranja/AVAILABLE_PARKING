@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>会员剩余车位数量 | Available Member Spaces</title>
+<style>
+  :root {
+    --bg: #0b1220;
+    --fg: #f4f7fb;
+    --muted: #8fa3bf;
+    --label: #d5e0f0;
+    --ok: #2ee59d;
+    --low: #ffb020;
+    --full: #ff4d5e;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: "Microsoft YaHei", "Noto Sans SC", "PingFang SC", "Segoe UI", Tahoma, sans-serif;
+    overflow: hidden;
+    cursor: none;   /* ซ่อนเมาส์บนจอทีวี */
+  }
+
+  .sign {
+    position: relative;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 6vh 5vw;   /* เผื่อขอบกันทีวีตัดภาพ (overscan) */
+  }
+
+  .label-cn {
+    font-size: min(10.5vw, 18vh);
+    font-weight: 700;
+    line-height: 1.15;
+  }
+  .label-en {
+    margin-top: 1.5vh;
+    font-size: min(4.5vw, 7vh);
+    font-weight: 500;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--label);
+  }
+
+  .number {
+    margin-top: 3vh;
+    font-size: min(34vw, 46vh);
+    font-weight: 800;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--ok);
+    transition: color .3s;
+  }
+  .number[data-state="low"]   { color: var(--low); }
+  .number[data-state="full"]  { color: var(--full); font-size: min(18vw, 28vh); }
+  .number[data-state="error"] { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="sign">
+  <div class="label-cn">会员剩余车位数量</div>
+  <div class="label-en">Available Member Spaces</div>
+  <div class="number" id="available_member_slots">--</div>
+</div>
+
+<script>
+const CONFIG = {
+  MOCK: true,          // TODO(backend): เปลี่ยนเป็น false เมื่อเชื่อม API จริง
+  POLL_MS: 3000,       // refresh interval (ms)
+  LOW_THRESHOLD: 10    // เลขเป็นสีเหลืองเมื่อคงเหลือ <= ค่านี้
+};
+
+/* ============================================================
+ * [BACKEND] ตัวแปรที่ต้องใส่ (ตอนนี้เป็นค่า mock คงที่ ตัวเลขไม่ขยับ)
+ *
+ *   total_slots : จำนวนช่องจอดทั้งหมด
+ *   parked_members : จำนวน member ที่จอดอยู่ในระบบ
+ *
+ *   คงเหลือ = total_slots - parked_members   (คำนวณให้แล้วใน render ด้านล่าง)
+ * ============================================================ */
+const MOCK_DATA = {
+  total_slots: 500,          // [BACKEND-1] ใส่ "จำนวนช่องจอดทั้งหมด"
+  parked_members: 150         // [BACKEND-2] ใส่ "จำนวน member ที่จอดอยู่ในระบบ"
+};
+
+/* ------------------------------------------------------------
+ * DATA LAYER  (backend: แก้ในฟังก์ชันนี้ที่เดียว)
+ * ต้อง return object หน้าตาแบบนี้:
+ *   { total_slots: number, parked_members: number }
+ * ------------------------------------------------------------ */
+async function fetchParkingStats() {
+  if (CONFIG.MOCK) return { ...MOCK_DATA };
+
+  // TODO(backend): ตัวอย่างเท่านั้น เปลี่ยนเป็น endpoint จริง
+  const res = await fetch('/api/parking/stats', { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();   // ต้องมี total_slots และ parked_members
+}
+
+/* ------------------------------------------------------------
+ * LOGIC
+ *   remaining = total_slots - parked_members
+ * ------------------------------------------------------------ */
+const el = document.getElementById('available_member_slots');
+
+function render(remaining) {
+  const value = Math.max(0, remaining);        // never show negative
+  if (value === 0) {
+    el.textContent = '已满 FULL';
+    el.dataset.state = 'full';
+  } else {
+    el.textContent = value;
+    el.dataset.state = value <= CONFIG.LOW_THRESHOLD ? 'low' : 'ok';
+  }
+}
+
+async function refresh() {
+  try {
+    const s = await fetchParkingStats();
+    render(s.total_slots - s.parked_members);
+  } catch (err) {
+    console.error('fetchParkingStats failed:', err);
+    el.textContent = '--';
+    el.dataset.state = 'error';
+  }
+}
+
+refresh();
+setInterval(refresh, CONFIG.POLL_MS);
+</script>
+</body>
+</html>
